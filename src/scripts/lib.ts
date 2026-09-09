@@ -1182,6 +1182,10 @@ export function renderBattleSummary(results: SummaryResult[]): string {
 }
 
 /* ------------------------------- history --------------------------------- */
+/** Credential slots, shared by the arena and the benchmark runner. */
+export const keyLS = (provider: string) => `ab:key:${provider}`;
+export const baseUrlLS = (provider: string) => `ab:url:${provider}`;
+
 export const HISTORY_KEY = "ab:history";
 export const HISTORY_LIMIT = 25;
 
@@ -1217,6 +1221,7 @@ export interface Battle {
   id: string;
   schemaVersion?: number;
   ts: number;
+  name?: string; // user-given title, shown in history and reports
   prompt: string;
   system: string;
   results: HistoryResult[];

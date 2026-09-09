@@ -30,6 +30,8 @@ import {
   installPreviewFade,
   restartPreview,
   modelBadge,
+  keyLS,
+  baseUrlLS,
   type Battle,
   type BlindBattleState,
   type HistoryResult,
@@ -91,8 +93,6 @@ const LS = {
   blind: "ab:blind",
   sharePublic: "ab:share-public",
 };
-const keyLS = (p: ProviderId) => `ab:key:${p}`;
-const baseUrlLS = (p: ProviderId) => `ab:url:${p}`;
 
 interface Entry {
   id: string; // raw model id (e.g. "gpt-5.5")
@@ -187,7 +187,8 @@ let sharePublic =
 let revealed = !blindMode;
 let blindOrder: string[] = [];
 const blindAliases = new Map<string, string>();
-let systemPrompt = localStorage.getItem(LS.system) || DEFAULT_SYSTEM_PROMPT;
+// `??`, not `||`: an empty box is a deliberate "no system prompt", not "unset".
+let systemPrompt = localStorage.getItem(LS.system) ?? DEFAULT_SYSTEM_PROMPT;
 let selected: string[] = (() => {
   try {
     const stored = JSON.parse(localStorage.getItem(LS.models) || "[]");
@@ -2016,6 +2017,7 @@ function renderHistory() {
           </span>
           <span class="flex items-center gap-1 text-[10px] text-[var(--color-ink-dim)]"><svg class="size-3.5"><use href="#i-restore"></use></svg>open</span>
         </div>
+        ${b.name?.trim() ? `<p class="mt-2 truncate text-[12px] font-medium text-[var(--color-accent)]">${esc(b.name)}</p>` : ""}
         <p class="mt-2 line-clamp-2 text-[12px] text-[var(--color-ink)]">${b.prompt ? esc(b.prompt) : '<span class="text-[var(--color-ink-faint)]">(empty prompt)</span>'}</p>
         <div class="mt-2 flex flex-wrap gap-1">${chips}</div>
         ${

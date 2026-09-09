@@ -1,0 +1,100 @@
+---
+// Print-first report over locally saved battles. Deliberately standalone:
+// the arena's dark theme is not what you want on paper.
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="robots" content="noindex" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<title>Battle report — isbetter.ai</title>
+		<style is:global>
+			:root { --ink:#111; --dim:#5a5f66; --line:#c9ced6; --accent:#1f6feb; }
+			* { box-sizing:border-box }
+			body { margin:0; background:#eef0f3; color:var(--ink);
+				font:12px/1.45 "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+			a { color:var(--accent) }
+			.bar { position:sticky; top:0; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:.75rem;
+				padding:.6rem 1rem; background:#fff; border-bottom:1px solid var(--line) }
+			.bar h1 { margin:0; font-size:13px; font-weight:600; letter-spacing:.02em }
+			.bar .spacer { flex:1 }
+			button { font:inherit; font-size:11px; padding:.35rem .7rem; border:1px solid var(--line);
+				border-radius:4px; background:#fff; cursor:pointer }
+			button:hover { border-color:var(--accent); color:var(--accent) }
+			#picker { display:flex; flex-wrap:wrap; gap:.6rem 2rem; padding:.6rem 1rem;
+				background:#fff; border-bottom:1px solid var(--line); font-size:11px; color:var(--dim) }
+			.pick-group { display:flex; flex-direction:column; gap:.25rem }
+			.pick-head { margin:0; font-size:9px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim) }
+			.pick { display:flex; gap:.35rem; align-items:center; max-width:34rem; cursor:pointer }
+			.pick span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+			.pick .name { width:9rem; font:inherit; font-size:11px; color:var(--ink); padding:.15rem .35rem;
+				border:1px solid transparent; border-radius:3px; background:#f4f6f8 }
+			.pick .name:focus { outline:none; border-color:var(--accent); background:#fff }
+
+			/* One .page element per printed A4 sheet; report.ts fills them. */
+			#report { display:flex; flex-direction:column; align-items:center; gap:1rem; padding:1rem 0 2rem }
+			.page { position:relative; width:210mm; min-height:297mm; padding:14mm; background:#fff;
+				box-shadow:0 1px 4px #0003 }
+			.page-foot { position:absolute; left:14mm; right:14mm; bottom:7mm; padding-top:2mm;
+				border-top:1px solid var(--line); font-size:8.5px; color:var(--dim); text-align:right }
+			.doc-head { border-bottom:2px solid var(--ink); padding-bottom:.5rem; margin-bottom:1rem }
+			h1 { font-size:19px; margin:0; letter-spacing:-.01em }
+			h2 { font-size:11px; text-transform:uppercase; letter-spacing:.09em; color:var(--dim);
+				margin:0 0 .4rem; font-weight:600 }
+			.meta { margin:.25rem 0 0; font-size:10.5px; color:var(--dim); font-weight:400; letter-spacing:0; text-transform:none }
+			.block { margin-bottom:1.1rem; break-inside:avoid }
+			.prompt { margin:0 0 .4rem; font-size:11px; color:var(--dim);
+				display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden }
+			.empty { color:var(--dim); font-size:12px }
+
+			table { width:100%; border-collapse:collapse; font-size:10.5px; font-variant-numeric:tabular-nums }
+			th { text-align:right; font-weight:600; font-size:9px; text-transform:uppercase; letter-spacing:.06em;
+				color:var(--dim); padding:.2rem .35rem; border-bottom:1px solid var(--ink) }
+			th:first-child, th.lft, td.m { text-align:left }
+			td { padding:.22rem .35rem; border-bottom:1px solid #e6e9ed }
+			td.n { text-align:right }
+			td.best { font-weight:600; color:var(--accent) }
+			td.dim, .dim { color:var(--dim) }
+			th.tick, td.tick { width:1.4rem; text-align:center; padding-left:.15rem; padding-right:.15rem }
+			th.who { width:4.6rem; text-align:center; font-size:8px; white-space:nowrap }
+			td.who { text-align:center; vertical-align:top; padding-left:.2rem; padding-right:.2rem }
+			td.who .got { display:block; font-size:8px; line-height:1.25; font-weight:400;
+				word-break:break-word; color:#b42318 }
+			td.pass { color:#127a3d; font-weight:600 }
+			td.fail { color:#b42318; font-weight:600 }
+			tfoot td { border-bottom:0; font-size:9px }
+			.err { color:#b42318; font-size:9px }
+
+			.charts { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:.7rem; break-inside:avoid }
+			.chart figcaption { font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin-bottom:.25rem }
+			.c-lbl { font-size:12px; fill:var(--ink) }
+			.c-val { font-size:12px; fill:var(--dim) }
+			.c-bar { fill:var(--accent); opacity:.85 }
+
+			@media print {
+				/* The page element already carries the A4 margins as padding. */
+				@page { size:A4; margin:0 }
+				body { background:#fff }
+				.bar, #picker { display:none }
+				#report { display:block; padding:0; gap:0 }
+				.page { width:auto; min-height:auto; height:297mm; box-shadow:none; break-after:page }
+				.page:last-child { break-after:auto }
+			}
+		</style>
+	</head>
+	<body>
+		<div class="bar">
+			<h1>Battle report</h1>
+			<span class="spacer"></span>
+			<a href="/" style="font-size:11px">← arena</a>
+			<button id="all">toggle all</button>
+			<button id="print">print / save as PDF</button>
+		</div>
+		<div id="picker"></div>
+		<main id="report"></main>
+		<script src="../scripts/report.ts"></script>
+	</body>
+</html>
