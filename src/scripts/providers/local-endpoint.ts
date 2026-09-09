@@ -1,7 +1,9 @@
 /**
- * Helpers for the `local` provider, whose base URL is whatever OpenAI-compatible
- * server the user runs: `http://localhost:11434/v1`, but just as often a box on
- * the LAN or a VPN (`http://192.168.1.20:8080/v1`, `http://gpu.local:8080/v1`).
+ * Helpers for providers whose base URL the user supplies — `local` and the
+ * `litellm` proxy — pointing at whatever OpenAI-compatible server they run:
+ * `http://localhost:11434/v1` or `http://localhost:4000/v1`, but just as often
+ * a box on the LAN or a VPN (`http://192.168.1.20:8080/v1`,
+ * `http://gpu.local:4000/v1`).
  *
  * Browsers guard those requests twice over: an https page may not load plain
  * http subresources (mixed content), and reaching a private address needs the

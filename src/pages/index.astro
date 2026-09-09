@@ -323,11 +323,25 @@ const PROMPT_EXAMPLES = [
 								<span class="text-[10px] text-[var(--color-ink-faint)]">{provider.credentialHelp}</span>
 							)}
 						</div>
+						{provider.endpoint === "with-key" && (
+							<div class="control-surface mb-1.5 flex items-center gap-2 px-3 focus-within:border-[var(--color-accent)]/45">
+								<input
+									id={`api-url-${provider.id}`}
+									type="text"
+									inputmode="url"
+									placeholder={provider.urlPlaceholder}
+									aria-label={`${provider.name} ${provider.urlLabel}`}
+									autocomplete="off"
+									spellcheck="false"
+									class="w-full bg-transparent font-mono text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
+								/>
+							</div>
+						)}
 						<div class="control-surface flex items-center gap-2 px-3 focus-within:border-[var(--color-accent)]/45">
 							<input
 								id={`api-key-${provider.id}`}
-								type={provider.id === "local" ? "text" : "password"}
-								inputmode={provider.id === "local" ? "url" : "text"}
+								type={provider.endpoint === "as-credential" ? "text" : "password"}
+								inputmode={provider.endpoint === "as-credential" ? "url" : "text"}
 								placeholder={provider.keyPlaceholder}
 								aria-label={`${provider.name} ${provider.credentialLabel}`}
 								autocomplete="off"
@@ -335,11 +349,12 @@ const PROMPT_EXAMPLES = [
 								class:list={["w-full bg-transparent font-mono text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"]}
 							/>
 						</div>
-						{provider.credentialHelp && provider.id !== "local" && (
+						{/* Providers with no key page already show their help beside the name. */}
+						{provider.credentialHelp && provider.keyUrl && (
 							<p class="mt-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">{provider.credentialHelp}</p>
 						)}
-						{provider.id === "local" && (
-							<p class="mt-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">Make sure your local server has CORS enabled. A LAN or VPN address (<code>http://192.168.1.20:8080/v1</code>) also needs the browser's local network permission, or https on the server.</p>
+						{provider.endpoint && (
+							<p class="mt-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">Make sure the server has CORS enabled. A LAN or VPN address (<code>http://192.168.1.20:8080/v1</code>) also needs the browser's local network permission, or https on the server.</p>
 						)}
 					</div>
 				))}

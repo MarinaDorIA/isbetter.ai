@@ -92,6 +92,7 @@ const LS = {
   sharePublic: "ab:share-public",
 };
 const keyLS = (p: ProviderId) => `ab:key:${p}`;
+const baseUrlLS = (p: ProviderId) => `ab:url:${p}`;
 
 interface Entry {
   id: string; // raw model id (e.g. "gpt-5.5")
@@ -148,15 +149,32 @@ const keys = Object.fromEntries(
   PROVIDER_IDS.map((provider) => [provider, localStorage.getItem(keyLS(provider)) || ""]),
 ) as Record<ProviderId, string>;
 const keyFor = (p: ProviderId) => keys[p] || "";
-const hasCreds = (p: ProviderId) => keyFor(p).trim() !== "";
 
-// Local endpoints are derived from its base URL (stored in the key slot);
-// every other provider uses its fixed URLs.
+// Providers whose endpoint the user supplies keep it in a slot of its own when
+// they also take a key (`litellm`); `local` has no key and stores the URL in
+// the credential slot instead.
+const baseUrls = Object.fromEntries(
+  PROVIDER_IDS.map((provider) => [provider, localStorage.getItem(baseUrlLS(provider)) || ""]),
+) as Record<ProviderId, string>;
+/** True for providers with a user-supplied endpoint, keyed or not. */
+const usesCustomEndpoint = (p: ProviderId) => PROVIDERS[p].endpoint !== undefined;
+const baseUrlFor = (p: ProviderId) =>
+  PROVIDERS[p].endpoint === "as-credential" ? keyFor(p) : baseUrls[p] || "";
+
+// A keyed proxy is configured once its base URL is set — the key stays optional
+// because a LiteLLM instance started without a master key rejects one.
+const hasCreds = (p: ProviderId) =>
+  usesCustomEndpoint(p) ? baseUrlFor(p).trim() !== "" : keyFor(p).trim() !== "";
+
+// User-supplied endpoints are derived from their base URL; every other provider
+// uses its fixed URLs.
 const trimBase = (u: string) => u.trim().replace(/\/+$/, "");
 const modelsUrlFor = (p: ProviderId) =>
-  p === "local" ? `${trimBase(keyFor("local"))}/models` : PROVIDERS[p].modelsUrl;
+  usesCustomEndpoint(p) ? `${trimBase(baseUrlFor(p))}/models` : PROVIDERS[p].modelsUrl;
 const chatUrlFor = (p: ProviderId) =>
-  p === "local" ? `${trimBase(keyFor("local"))}/chat/completions` : PROVIDERS[p].chatUrl;
+  usesCustomEndpoint(p)
+    ? `${trimBase(baseUrlFor(p))}/chat/completions`
+    : PROVIDERS[p].chatUrl;
 
 /** Temporarily off while public publish / security review is reviewed. */
 const SHARE_PUBLIC_ENABLED = false;
@@ -266,7 +284,7 @@ const els = {
 /* ===================================================================== */
 /*  API KEYS — one per provider                                          */
 /* ===================================================================== */
-const anyKey = () => PROVIDER_IDS.some((p) => keyFor(p).trim());
+const anyKey = () => PROVIDER_IDS.some(hasCreds);
 let dialogReturnFocus: HTMLElement | null = null;
 function reorderProviderTabs() {
   // Keep "All" first; configured providers next, then the rest (stable order).
@@ -295,6 +313,8 @@ function openKeyModal(message = "") {
   for (const p of PROVIDER_IDS) {
     const inp = $<HTMLInputElement>(`#api-key-${p}`);
     if (inp) inp.value = keyFor(p);
+    const url = $<HTMLInputElement>(`#api-url-${p}`);
+    if (url) url.value = baseUrls[p] || "";
   }
   els.keyMessage.textContent = message;
   els.keyMessage.classList.toggle("hidden", !message);
@@ -312,10 +332,14 @@ els.keySave.addEventListener("click", () => {
   for (const p of PROVIDER_IDS) {
     const inp = $<HTMLInputElement>(`#api-key-${p}`);
     const val = inp?.value.trim() || "";
-    const changed = val !== keys[p];
+    const url = $<HTMLInputElement>(`#api-url-${p}`)?.value.trim() || "";
+    const changed = val !== keys[p] || url !== (baseUrls[p] || "");
     keys[p] = val;
+    baseUrls[p] = url;
     if (val) localStorage.setItem(keyLS(p), val);
     else localStorage.removeItem(keyLS(p));
+    if (url) localStorage.setItem(baseUrlLS(p), url);
+    else localStorage.removeItem(baseUrlLS(p));
     // Refresh additions and clear catalogs whose credential was removed.
     if (changed) loadProviderModels(p);
   }
@@ -325,9 +349,10 @@ els.keySave.addEventListener("click", () => {
   closeKeyModal();
 });
 PROVIDER_IDS.forEach((p) => {
-  $(`#api-key-${p}`)?.addEventListener("keydown", (e) => {
-    if ((e as KeyboardEvent).key === "Enter") els.keySave.dispatchEvent(new Event("click"));
-  });
+  for (const id of [`#api-key-${p}`, `#api-url-${p}`])
+    $(id)?.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Enter") els.keySave.dispatchEvent(new Event("click"));
+    });
 });
 
 /* ===================================================================== */
@@ -339,12 +364,12 @@ PROVIDER_IDS.forEach((p) => {
  * answered — name the likely cause instead of guessing CORS every time.
  */
 function blockedMessage(p: ProviderId): string {
-  if (p !== "local") {
+  if (!usesCustomEndpoint(p)) {
     return `Browser access to ${PROVIDERS[p].name} was blocked (likely CORS). Use this model through OpenRouter.`;
   }
   return (
-    localEndpointBlockReason(keyFor("local")) ??
-    "The local server did not answer. Check that it is running and that it allows CORS from this origin."
+    localEndpointBlockReason(baseUrlFor(p)) ??
+    `The ${PROVIDERS[p].name} server did not answer. Check that it is running and that it allows CORS from this origin.`
   );
 }
 
@@ -360,13 +385,12 @@ async function loadProviderModels(p: ProviderId) {
     // A GET carrying custom headers (Content-Type, auth…) is a non-simple
     // request and triggers a CORS preflight. `local` servers like LM Studio
     // don't answer OPTIONS with CORS headers, so we send a bare GET — no auth
-    // is needed to list local models anyway.
-    const res = await fetch(
-      modelsUrlFor(p),
-      p !== "local"
-        ? { headers: prov.headers(keyFor(p)) }
-        : localFetchInit(keyFor("local")),
-    );
+    // is needed to list local models anyway. A LiteLLM proxy does gate
+    // /v1/models behind its key, so it keeps its headers.
+    const res = await fetch(modelsUrlFor(p), {
+      ...(usesCustomEndpoint(p) ? localFetchInit(baseUrlFor(p)) : {}),
+      ...(prov.endpoint === "as-credential" ? {} : { headers: prov.headers(keyFor(p)) }),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     const json = await res.json();
     providerModels[p] = prov.parseModels(json).sort((a, b) => a.id.localeCompare(b.id));
@@ -516,8 +540,10 @@ function renderModelList() {
   } else {
     const prov = PROVIDERS[dropdownProvider];
     if (!hasCreds(dropdownProvider)) {
-      const what = dropdownProvider === "local" ? "base URL" : "API key";
-      const cta = dropdownProvider === "local" ? "set base URL" : "add key";
+      // What is actually missing: a keyed proxy still only needs its base URL.
+      const needsUrl = usesCustomEndpoint(dropdownProvider);
+      const what = needsUrl ? "base URL" : "API key";
+      const cta = needsUrl ? "set base URL" : "add key";
       html += `<li class="px-3 py-6 text-center text-[11px] leading-relaxed text-[var(--color-ink-faint)]">Set your ${esc(prov.name)} ${what} to list its models.<br/><button data-openkeys class="mt-2 text-[var(--color-accent)] underline-offset-2 hover:underline">${cta}</button></li>`;
     } else if (providerErrors.has(dropdownProvider)) {
       html += `<li class="px-3 py-6 text-center text-[11px] leading-relaxed text-red-400/90">${esc(providerErrors.get(dropdownProvider)!)}<br/><button data-openkeys class="mt-2 text-[var(--color-accent)] underline-offset-2 hover:underline">check credentials</button></li>`;
@@ -1327,13 +1353,12 @@ async function callModel(entry: Entry) {
   renderCard(entry);
 
   // No credential for this provider → fail fast with a helpful message.
-  if (!key.trim()) {
+  if (!hasCreds(entry.provider)) {
     entry.state = "error";
     entry.durationMs = 0;
-    entry.error =
-      entry.provider === "local"
-        ? "Set your Local API base URL to run this model."
-        : `Add your ${prov.name} API key to run this model.`;
+    entry.error = usesCustomEndpoint(entry.provider)
+      ? `Set your ${prov.name} base URL to run this model.`
+      : `Add your ${prov.name} API key to run this model.`;
     renderCard(entry);
     return;
   }
@@ -1343,7 +1368,7 @@ async function callModel(entry: Entry) {
   controllers.set(entry.key, controller);
   try {
     const res = await fetch(chatUrlFor(entry.provider), {
-      ...(entry.provider === "local" ? localFetchInit(key) : {}),
+      ...(usesCustomEndpoint(entry.provider) ? localFetchInit(baseUrlFor(entry.provider)) : {}),
       method: "POST",
       headers: prov.headers(key),
       body: JSON.stringify(prov.body(entry.id, usedSystem, usedPrompt)),
@@ -1584,7 +1609,7 @@ async function runBattle(force = false) {
   if (!anyKey()) return openKeyModal("Add at least one API key to get started.");
   if (!selected.length) return toggleDropdown(true);
   const neededProviders = [...new Set(selected.map((k) => parseKey(k).provider))];
-  if (!neededProviders.every((p) => keyFor(p).trim())) return openKeyModal();
+  if (!neededProviders.every(hasCreds)) return openKeyModal();
   const prompt = els.prompt.value.trim();
   if (!prompt) {
     els.promptShell.classList.add("validation-error");
@@ -1706,7 +1731,7 @@ els.results.addEventListener("click", async (e) => {
   } else if (action === "view-code") {
     setView("code");
   } else if (action === "rerun") {
-    if (!keyFor(entry.provider).trim()) return openKeyModal();
+    if (!hasCreds(entry.provider)) return openKeyModal();
     await callModel(entry);
     computeBests();
     // Single-model retry never goes through runBattle, so patch the archived

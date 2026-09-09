@@ -12,6 +12,7 @@ describe("provider registry", () => {
   it("contains every supported direct provider", () => {
     expect(PROVIDER_IDS).toEqual([
       "local",
+      "litellm",
       "openrouter",
       "openai",
       "anthropic",
@@ -36,6 +37,44 @@ describe("provider registry", () => {
     expect(PROVIDERS.anthropic.body("claude-sonnet-4-5", "", "")).toMatchObject({
       max_tokens: 64_000,
     });
+  });
+
+  it("describes LiteLLM as a keyed, user-supplied endpoint", () => {
+    const litellm = PROVIDERS.litellm;
+    expect(litellm.endpoint).toBe("with-key");
+    // Both URLs are derived from the base URL the user types.
+    expect(litellm.modelsUrl).toBe("");
+    expect(litellm.chatUrl).toBe("");
+    expect(litellm.urlLabel).toBe("Base URL");
+    expect(litellm.body("gpt-5", "sys", "hi")).toMatchObject({
+      model: "gpt-5",
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+  });
+
+  it("authenticates to LiteLLM only when a virtual key is set", () => {
+    expect(PROVIDERS.litellm.headers("sk-abc")).toMatchObject({
+      Authorization: "Bearer sk-abc",
+    });
+    // A proxy with no master_key refuses a bare `Bearer ` header.
+    expect(PROVIDERS.litellm.headers("  ")).toEqual({
+      "Content-Type": "application/json",
+    });
+  });
+
+  it("prices LiteLLM models through their upstream tables", () => {
+    expect(priceFor("litellm", "claude-opus-5")).toEqual({
+      prompt: 5 / 1e6,
+      completion: 25 / 1e6,
+    });
+    // A `provider/model` route resolves on the segment after the prefix.
+    expect(priceFor("litellm", "azure/gpt-5-mini")).toEqual({
+      prompt: 0.25 / 1e6,
+      completion: 2 / 1e6,
+    });
+    // House aliases stay unpriced rather than guessing.
+    expect(priceFor("litellm", "smart-model")).toBeNull();
   });
 
   it("picks Anthropic max_tokens from each model family", () => {
