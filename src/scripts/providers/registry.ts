@@ -13,6 +13,10 @@ const OPENROUTER_LOGO = `data:image/svg+xml,${encodeURIComponent(
   `<svg width="28.3" height="20" viewBox="19.82 17.199 365.556 258.298" xmlns="http://www.w3.org/2000/svg" fill="currentColor" role="img" aria-label="OpenRouter"><path d="M303.9475,17.19926c42.79734,0,77.48933,34.69327,77.48933,77.48933s-34.69199,77.48933-77.48933,77.48933l76.86166,76.86244c9.76367,9.76313,2.84903,26.45667-10.95697,26.45667h-220.88335c-71.32686,0-129.14889-57.82202-129.14889-129.14889S77.64197,17.19926,148.96884,17.19926h154.97866ZM148.96884,68.85881c-42.79607,0-77.48933,34.69327-77.48933,77.48933s34.69327,77.48933,77.48933,77.48933,77.48933-34.69327,77.48933-77.48933-34.69327-77.48933-77.48933-77.48933Z"></path></svg>`,
 )}`;
 
+/** A routing hub: one entry point fanning out to several upstream models. */
+const LITELLM_LOGO =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='5' cy='12' r='2.2'/%3E%3Ccircle cx='19' cy='5.5' r='2.2'/%3E%3Ccircle cx='19' cy='12' r='2.2'/%3E%3Ccircle cx='19' cy='18.5' r='2.2'/%3E%3Cpath d='M7.2 12h9.6M7.2 11.3 16.9 6.2M7.2 12.7l9.7 5.1'/%3E%3C/svg%3E";
+
 const LOCAL_LOGO =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='13' rx='2'/%3E%3Cpath d='m8 9 2 2-2 2m4 0h4M8 21h8m-4-4v4'/%3E%3C/svg%3E";
 
@@ -134,17 +138,39 @@ const PRICE_TABLES: Partial<Record<ProviderId, PriceRow[]>> = {
   kimi: KIMI_PRICES,
 };
 
-export function priceFor(
-  provider: ProviderId,
-  modelId: string,
-): { prompt: number; completion: number } | null {
-  if (provider === "local") return { prompt: 0, completion: 0 };
-  const rows = PRICE_TABLES[provider];
-  if (!rows) return null;
+type Price = { prompt: number; completion: number };
+
+function lookup(rows: PriceRow[], modelId: string): Price | null {
   const id = modelId.toLowerCase();
   for (const [prefix, input, output] of rows)
     if (id.startsWith(prefix)) return { prompt: input / 1e6, completion: output / 1e6 };
   return null;
+}
+
+/**
+ * A LiteLLM proxy names its models however its owner configured them: `gpt-5`,
+ * `openai/gpt-5`, `azure/gpt-5-prod`, or a house alias like `smart`. Try the id
+ * against every upstream table — whole, and again without a `provider/` prefix
+ * — so routed models still show a cost instead of "Unknown". Genuine aliases
+ * nobody can map stay unpriced, which is honest: the proxy owner may well have
+ * repointed them since.
+ */
+function proxyPrice(modelId: string): Price | null {
+  const slash = modelId.indexOf("/");
+  const candidates = slash === -1 ? [modelId] : [modelId, modelId.slice(slash + 1)];
+  for (const rows of Object.values(PRICE_TABLES))
+    for (const candidate of candidates) {
+      const price = rows && lookup(rows, candidate);
+      if (price) return price;
+    }
+  return null;
+}
+
+export function priceFor(provider: ProviderId, modelId: string): Price | null {
+  if (provider === "local") return { prompt: 0, completion: 0 };
+  if (provider === "litellm") return proxyPrice(modelId);
+  const rows = PRICE_TABLES[provider];
+  return rows ? lookup(rows, modelId) : null;
 }
 
 function genericModels(value: unknown, provider?: ProviderId): ModelInfo[] {
@@ -230,12 +256,13 @@ const openAIBody = (includeUsage = false) => (model: string, system: string, use
 function compatibleProvider(
   config: Omit<Provider, "headers" | "body" | "parse" | "parseModels"> & {
     includeUsage?: boolean;
+    headers?: Provider["headers"];
     parseModels?: Provider["parseModels"];
   },
 ): Provider {
   return {
     ...config,
-    headers: bearerHeaders,
+    headers: config.headers || bearerHeaders,
     body: openAIBody(config.includeUsage),
     parse: parseOpenAIChunk,
     parseModels: config.parseModels || ((json) => genericModels(json, config.id)),
@@ -255,12 +282,36 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
     credentialHelp: "Ollama · LM Studio · llama.cpp · vLLM · LocalAI",
     modelsUrl: "",
     chatUrl: "",
+    endpoint: "as-credential",
     browserSupport: "variable",
     headers: () => ({ "Content-Type": "application/json" }),
     body: openAIBody(false),
     parse: parseOpenAIChunk,
     parseModels: (json) => genericModels(json),
   },
+  litellm: compatibleProvider({
+    id: "litellm",
+    name: "LiteLLM",
+    short: "LiteLLM",
+    color: "#6d5ce7",
+    logo: LITELLM_LOGO,
+    logoMonochrome: true,
+    keyPlaceholder: "sk-… (leave empty if the proxy has no auth)",
+    keyUrl: "",
+    credentialLabel: "Virtual key",
+    credentialHelp: "LiteLLM proxy · OpenAI-compatible Chat Completions",
+    modelsUrl: "",
+    chatUrl: "",
+    endpoint: "with-key",
+    urlLabel: "Base URL",
+    urlPlaceholder: "http://localhost:4000/v1",
+    browserSupport: "variable",
+    includeUsage: true,
+    // A proxy started without `master_key` rejects a bare `Bearer ` header, so
+    // authenticate only when the user actually has a virtual key.
+    headers: (key) =>
+      key.trim() ? bearerHeaders(key) : { "Content-Type": "application/json" },
+  }),
   openrouter: {
     id: "openrouter",
     name: "OpenRouter",

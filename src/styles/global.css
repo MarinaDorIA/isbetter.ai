@@ -433,3 +433,19 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Slim, always-visible horizontal scrollbar (provider tablist) */
+@utility thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-hi) transparent;
+  &::-webkit-scrollbar {
+    height: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-line-hi);
+    border-radius: 999px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

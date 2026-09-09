@@ -621,7 +621,13 @@ export function providerBadge(p?: string) {
   return `<span class="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide" style="color:${meta.color};background:${meta.color}1a" title="${esc(meta.name)}"><img src="${esc(meta.logo)}" alt="" class="size-3.5 object-contain${mono}">${esc(meta.short)}</span>`;
 }
 
-const INFERENCE_PROVIDERS = new Set(["openrouter", "groq", "cerebras", "local"]);
+const INFERENCE_PROVIDERS = new Set([
+  "openrouter",
+  "groq",
+  "cerebras",
+  "local",
+  "litellm",
+]);
 
 function iconTile(name: string, logo: string, monochrome = false) {
   const mono = monochrome ? " brightness-0 invert" : "";

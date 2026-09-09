@@ -30,8 +30,9 @@ Give every model the same prompt and compare the answer, the generated code, a l
 | Groq | Ultra-fast open-model inference |
 | Cerebras | Ultra-fast open-model inference |
 | Local | Any OpenAI-compatible server (Ollama, LM Studio, llama.cpp, …) |
+| LiteLLM | Any LiteLLM proxy — its base URL plus a virtual key, if it has one |
 
-Models served through an inference provider (OpenRouter, Groq, Cerebras, local) also show the badge of the lab that created the model.
+Models served through an inference provider (OpenRouter, Groq, Cerebras, LiteLLM, local) also show the badge of the lab that created the model.
 
 ## Tech stack
 
