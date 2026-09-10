@@ -8,6 +8,7 @@ export type ProviderId =
   | "xai"
   | "deepseek"
   | "kimi"
+  | "minimax"
   | "mistral"
   | "groq"
   | "cerebras";

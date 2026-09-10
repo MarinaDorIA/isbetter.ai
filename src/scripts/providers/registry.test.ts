@@ -20,6 +20,7 @@ describe("provider registry", () => {
       "xai",
       "deepseek",
       "kimi",
+      "minimax",
       "mistral",
       "groq",
       "cerebras",
@@ -75,6 +76,14 @@ describe("provider registry", () => {
     });
     // House aliases stay unpriced rather than guessing.
     expect(priceFor("litellm", "smart-model")).toBeNull();
+  });
+
+  it("asks MiniMax to split thinking out of the answer", () => {
+    expect(PROVIDERS.minimax.body("MiniMax-M3", "sys", "hi")).toMatchObject({
+      reasoning_split: true,
+      stream: true,
+      stream_options: { include_usage: true },
+    });
   });
 
   it("picks Anthropic max_tokens from each model family", () => {
@@ -140,6 +149,14 @@ describe("provider registry", () => {
     expect(priceFor("kimi", "kimi-k3")).toEqual({
       prompt: 3 / 1e6,
       completion: 15 / 1e6,
+    });
+    expect(priceFor("minimax", "MiniMax-M3")).toEqual({
+      prompt: 0.3 / 1e6,
+      completion: 1.2 / 1e6,
+    });
+    expect(priceFor("minimax", "MiniMax-M2.7-highspeed")).toEqual({
+      prompt: 0.6 / 1e6,
+      completion: 2.4 / 1e6,
     });
   });
 });

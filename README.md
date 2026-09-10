@@ -26,6 +26,8 @@ Give every model the same prompt and compare the answer, the generated code, a l
 | Google Gemini | Gemini models |
 | xAI | Grok models |
 | DeepSeek | DeepSeek chat and reasoner models |
+| Kimi | Moonshot AI Kimi models |
+| MiniMax | MiniMax M-series models |
 | Mistral AI | Mistral models |
 | Groq | Ultra-fast open-model inference |
 | Cerebras | Ultra-fast open-model inference |
