@@ -5,6 +5,7 @@ import geminiLogo from "@lobehub/icons-static-svg/icons/gemini-color.svg?url";
 import xAILogo from "@lobehub/icons-static-svg/icons/xai.svg?url";
 import deepSeekLogo from "@lobehub/icons-static-svg/icons/deepseek-color.svg?url";
 import kimiLogo from "@lobehub/icons-static-svg/icons/kimi-color.svg?url";
+import miniMaxLogo from "@lobehub/icons-static-svg/icons/minimax-color.svg?url";
 import mistralLogo from "@lobehub/icons-static-svg/icons/mistral-color.svg?url";
 import groqLogo from "@lobehub/icons-static-svg/icons/groq.svg?url";
 import cerebrasLogo from "@lobehub/icons-static-svg/icons/cerebras-color.svg?url";
@@ -131,11 +132,19 @@ const KIMI_PRICES: PriceRow[] = [
   ["kimi-k3", 3, 15],
 ];
 
+// Standard tier. Not modeled: M3 over 512K input (2x) and priority service (1.5x).
+const MINIMAX_PRICES: PriceRow[] = [
+  ["minimax-m2.7-highspeed", 0.6, 2.4],
+  ["minimax-m2", 0.3, 1.2],
+  ["minimax-m3", 0.3, 1.2],
+];
+
 const PRICE_TABLES: Partial<Record<ProviderId, PriceRow[]>> = {
   openai: OPENAI_PRICES,
   anthropic: ANTHROPIC_PRICES,
   deepseek: DEEPSEEK_PRICES,
   kimi: KIMI_PRICES,
+  minimax: MINIMAX_PRICES,
 };
 
 type Price = { prompt: number; completion: number };
@@ -257,13 +266,14 @@ function compatibleProvider(
   config: Omit<Provider, "headers" | "body" | "parse" | "parseModels"> & {
     includeUsage?: boolean;
     headers?: Provider["headers"];
+    body?: Provider["body"];
     parseModels?: Provider["parseModels"];
   },
 ): Provider {
   return {
     ...config,
     headers: config.headers || bearerHeaders,
-    body: openAIBody(config.includeUsage),
+    body: config.body || openAIBody(config.includeUsage),
     parse: parseOpenAIChunk,
     parseModels: config.parseModels || ((json) => genericModels(json, config.id)),
   };
@@ -438,6 +448,27 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
     modelsUrl: "https://api.moonshot.ai/v1/models",
     chatUrl: "https://api.moonshot.ai/v1/chat/completions",
     browserSupport: "variable",
+  }),
+  minimax: compatibleProvider({
+    id: "minimax",
+    name: "MiniMax",
+    short: "MiniMax",
+    color: "#fe603c",
+    logo: miniMaxLogo,
+    keyPlaceholder: "sk-…",
+    keyUrl: "https://platform.minimax.io/user-center/basic-information/interface-key",
+    credentialLabel: "API key",
+    credentialHelp: "MiniMax M-series · OpenAI-compatible Chat Completions.",
+    modelsUrl: "https://api.minimax.io/v1/models",
+    chatUrl: "https://api.minimax.io/v1/chat/completions",
+    browserSupport: "variable",
+    // Left alone, M-series models bury their thinking in `content` between
+    // <think> tags; `reasoning_split` moves it to `reasoning_content`, where
+    // the thoughts pane picks it up.
+    body: (model, system, user) => ({
+      ...openAIBody(true)(model, system, user),
+      reasoning_split: true,
+    }),
   }),
   mistral: compatibleProvider({
     id: "mistral",
