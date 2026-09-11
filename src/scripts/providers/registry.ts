@@ -6,6 +6,7 @@ import xAILogo from "@lobehub/icons-static-svg/icons/xai.svg?url";
 import deepSeekLogo from "@lobehub/icons-static-svg/icons/deepseek-color.svg?url";
 import kimiLogo from "@lobehub/icons-static-svg/icons/kimi-color.svg?url";
 import miniMaxLogo from "@lobehub/icons-static-svg/icons/minimax-color.svg?url";
+import zaiLogo from "@lobehub/icons-static-svg/icons/zai.svg?url";
 import mistralLogo from "@lobehub/icons-static-svg/icons/mistral-color.svg?url";
 import groqLogo from "@lobehub/icons-static-svg/icons/groq.svg?url";
 import cerebrasLogo from "@lobehub/icons-static-svg/icons/cerebras-color.svg?url";
@@ -139,12 +140,23 @@ const MINIMAX_PRICES: PriceRow[] = [
   ["minimax-m3", 0.3, 1.2],
 ];
 
+// Standard tier. Cache-hit input (glm-5.3 $0.26, glm-4.7 $0.11) is not modeled.
+// `-flash` goes first: `glm-5.3` would swallow it as a prefix.
+const ZAI_PRICES: PriceRow[] = [
+  ["glm-5.3-flash", 0.075, 0.25],
+  ["glm-5.3", 1.4, 4.4],
+  ["glm-5.2", 0.402, 1.26],
+  ["glm-5", 0.6, 1.92],
+  ["glm-4.7", 0.6, 2.2],
+];
+
 const PRICE_TABLES: Partial<Record<ProviderId, PriceRow[]>> = {
   openai: OPENAI_PRICES,
   anthropic: ANTHROPIC_PRICES,
   deepseek: DEEPSEEK_PRICES,
   kimi: KIMI_PRICES,
   minimax: MINIMAX_PRICES,
+  zai: ZAI_PRICES,
 };
 
 type Price = { prompt: number; completion: number };
@@ -469,6 +481,23 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
       ...openAIBody(true)(model, system, user),
       reasoning_split: true,
     }),
+  }),
+  zai: compatibleProvider({
+    id: "zai",
+    name: "Z.ai",
+    short: "GLM",
+    color: "#3859ff",
+    logo: zaiLogo,
+    logoMonochrome: true,
+    keyPlaceholder: "…",
+    keyUrl: "https://z.ai/manage-apikey/apikey-list",
+    credentialLabel: "API key",
+    credentialHelp: "Z.ai GLM · OpenAI-compatible Chat Completions.",
+    modelsUrl: "https://api.z.ai/api/paas/v4/models",
+    chatUrl: "https://api.z.ai/api/paas/v4/chat/completions",
+    browserSupport: "variable",
+    // No `thinking` flag, unlike MiniMax above: on GLM-4.5+ it already defaults
+    // to "enabled", so reasoning_content streams on its own.
   }),
   mistral: compatibleProvider({
     id: "mistral",

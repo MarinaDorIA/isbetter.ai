@@ -21,6 +21,7 @@ describe("provider registry", () => {
       "deepseek",
       "kimi",
       "minimax",
+      "zai",
       "mistral",
       "groq",
       "cerebras",
@@ -157,6 +158,15 @@ describe("provider registry", () => {
     expect(priceFor("minimax", "MiniMax-M2.7-highspeed")).toEqual({
       prompt: 0.6 / 1e6,
       completion: 2.4 / 1e6,
+    });
+    expect(priceFor("zai", "glm-5.3")).toEqual({
+      prompt: 1.4 / 1e6,
+      completion: 4.4 / 1e6,
+    });
+    // The cheaper -flash must win over the `glm-5.3` prefix above it.
+    expect(priceFor("zai", "glm-5.3-flash")).toEqual({
+      prompt: 0.075 / 1e6,
+      completion: 0.25 / 1e6,
     });
   });
 });

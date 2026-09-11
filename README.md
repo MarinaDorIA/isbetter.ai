@@ -28,6 +28,7 @@ Give every model the same prompt and compare the answer, the generated code, a l
 | DeepSeek | DeepSeek chat and reasoner models |
 | Kimi | Moonshot AI Kimi models |
 | MiniMax | MiniMax M-series models |
+| Z.ai | GLM models |
 | Mistral AI | Mistral models |
 | Groq | Ultra-fast open-model inference |
 | Cerebras | Ultra-fast open-model inference |
